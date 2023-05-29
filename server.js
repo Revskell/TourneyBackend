@@ -1,14 +1,57 @@
 const express = require('express');
+const keys = require('./config/keys.js');
 
 const app = express();
 
+// Setting up Database
+const mongoose = require('mongoose');
+mongoose.connect(keys.mongoURI, {useNewUrlParser: true, useUnifiedTopology: true});
+
+// Setup Database models
+require('./model/Account');
+const Account = mongoose.model('accounts');
+
 // Routes
-app.get('/auth', async (req, res) => {
-    console.log(req.query);
-    res.send("empezando ");
+app.get('/account', async (req, res) => {
+    
+    const { rUsername, rPassword } = req.query;
+    if(rUsername == null || rPassword == null) {
+        res.send("Invalid Credentials");
+        return;
+    }
+
+    var userAccount = await Account.findOne({ username: rUsername});
+    if(userAccount == null) {
+        // Create new account
+        console.log("Create new account...");
+        
+        var newAccount = new Account({
+            username : rUsername,
+            password : rPassword,
+
+            lastAuthentication : Date.now(),
+        });
+        await newAccount.save();
+        
+        res.send(newAccount);
+        return;
+    }
+    else {
+        if(rPassword == userAccount.password) {
+            userAccount.lastAuthentication = Date.now();
+            await userAccount.save();
+
+            console.log("Retrieving account...");
+            res.send(userAccount);
+            return;
+        }
+    }
+
+    res.send("Invalid Credentials");
+    return;
 });
 
-const port = 13756; // quizas cambiar?
-app.listen(port, () => {
-    console.log("Listening on " + port);
+
+app.listen(keys.port, () => {
+    console.log("Listening on " + keys.port);
 });
