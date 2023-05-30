@@ -1,61 +1,113 @@
 const mongoose = require('mongoose');
 const Account = mongoose.model('accounts');
 
+const argon2i = require('argon2-ffi').argon2i;
+const crypto = require('crypto');
+
+const passwordRegex = new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.{5,30})");
+
 module.exports = app => {
 
     // Routes
     app.post('/account/login', async (req, res) => {
+
+        var response = {  };
     
         const { rUsername, rPassword } = req.body;
-        if(rUsername == null || rPassword == null) {
-            res.send("Invalid Credentials");
+        if(rUsername == null || !passwordRegex.test(rPassword)) {
+
+            response.code = 1;
+            response.msg = "Invalid credentials";
+
+            res.send(response);
             return;
         }
 
-        var userAccount = await Account.findOne({ username: rUsername});
+        var userAccount = await Account.findOne( { username: rUsername }, 'username password');
         if(userAccount != null) 
         {
-            if(rPassword == userAccount.password) {
-                userAccount.lastAuthentication = Date.now();
-                await userAccount.save();
+            argon2i.verify(userAccount.password, rPassword).then(async (success) => {
+                if(success) {
+                    userAccount.lastAuthentication = Date.now();
+                    await userAccount.save();
 
-                console.log("Retrieving account...");
-                res.send(userAccount);
-                return;
-            }
+                    response.code = 0;
+                    response.msg = "Account found";
+                    response.data = ( ({username}) => ({username})) (userAccount);
+                    
+                    res.send(response);
+                    return;
+                }
+                else {
+                    response.code = 1;
+                    response.msg = "Invalid credentials";
+                    res.send(response);
+                    return;
+                }
+            });
         }
-
-        res.send("Invalid Credentials");
-        return;
+        else {
+            response.code = 1;
+            response.msg = "Invalid credentials";
+            res.send(response);
+            return;
+        }
     });
 
     app.post('/account/create', async (req, res) => {
+
+        var response = {  };
     
         const { rUsername, rPassword } = req.body;
-        if(rUsername == null || rPassword == null) {
-            res.send("Invalid Credentials");
+        if(rUsername == null || rUsername.length < 3 || rUsername.length > 30) {
+            response.code = 1;
+            response.msg = "Invalid credentials";
+            res.send(response);
             return;
         }
 
-        var userAccount = await Account.findOne({ username: rUsername});
+        if(!passwordRegex.test(rPassword)) {
+            response.code = 3;
+            response.msg = "Unsafe password";
+            res.send(response);
+            return;
+        }
+
+        var userAccount = await Account.findOne({ username: rUsername}, '_id');
         if(userAccount == null) {
             // Create new account
             console.log("Create new account...");
-        
-            var newAccount = new Account({
-                username : rUsername,
-                password : rPassword,
 
-                lastAuthentication : Date.now(),
-            });
-            await newAccount.save();
+            // Generate a unique access token
+            crypto.randomBytes(32, function(err, salt) {
+                
+                if(err) console.log(err);
+
+                argon2i.hash(rPassword, salt).then(async (hash) => {
+
+                    var newAccount = new Account({
+                        username : rUsername,
+                        password : hash,
+                        salt: salt,
         
-            res.send(newAccount);
-            return;
+                        lastAuthentication : Date.now(),
+                    });
+                    await newAccount.save();
+
+                    response.code = 0;
+                    response.msg = "Account found";
+                    response.data = ( ({username}) => ({username})) (newAccount);
+
+                    res.send(response);
+                    return;
+                });
+            });
         }
 
         else {
-            res.send("Username is already taken");
+            response.code = 2;
+            response.msg = "Username is already taken";
+            res.send(response);
         }
         
         return;
