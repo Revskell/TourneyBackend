@@ -3,6 +3,8 @@ const keys = require('./config/keys.js');
 const app = express();
 const bodyParser = require('body-parser');
 
+app.use(express.json());
+
 // parse application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: false }));
 
@@ -12,6 +14,7 @@ mongoose.connect(keys.mongoURI, {useNewUrlParser: true, useUnifiedTopology: true
 
 // Setup Database models
 require('./model/Account');
+require('./model/Tourney');
 
 // stack more models and routes
 
