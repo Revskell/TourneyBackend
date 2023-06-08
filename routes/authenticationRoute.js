@@ -172,7 +172,7 @@ module.exports = app => {
 
         var response = { };
 
-        const { rUsername } = req.body;
+        const rUsername = req.query.rUsername;
 
         if(rUsername == null) {
             response.code = 1;
